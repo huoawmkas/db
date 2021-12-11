@@ -214,7 +214,7 @@ func Substr(str string, start int, length ...int) string {
 
 func logWari(war ...interface{})  {
 	// 输出日志
-	pc, _, line, _ := runtime.Caller(2)
+	pc, _, line, _ := runtime.Caller(1)
 	p := runtime.FuncForPC(pc)
 	t := time.Now().Local().Format("2006/01/02 15:04:05.999999")
 	fmt.Print(fmt.Sprintf("%s%-26s \u001B[%dm[%s]\u001B[0m %s(%d): %s\n", "", t, 33, "WARI", p.Name(), line, fmt.Sprint(war...)))
