@@ -8,7 +8,7 @@ import (
 
 func main() {
   // init 
-  driver := Username:Password@tcp(127.0.0.1:3306)/Database?charset=utf8mb4
+  driver := "Username:Password@tcp(127.0.0.1:3306)/Database?charset=utf8mb4"
   Db, err := sql.Open("mysql", driver)
   if err != nil {
     return
