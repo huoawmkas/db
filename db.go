@@ -120,7 +120,7 @@ func (this *Database) Exec(query string, args ...interface{}) (sql.Result, error
 	return this.DB.Exec(query, args...)
 }
 
-// 查询单条记录
+// 查询多条记录
 func (this *Database) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return this.DB.Query(query, args...)
 }
@@ -130,8 +130,7 @@ func (this *Database) QueryRow(query string, args ...interface{}) *sql.Row {
 	return this.DB.QueryRow(query, args...)
 }
 
-// QueryStructs 查询实体集合
-// obj 为接收数据的实体指针
+// QueryStructs 查询实体集合 obj必须为接收数据的实体指针
 func (this *Database) QueryStructs(obj interface{}, sql string, args ...interface{}) error {
 	var tagMap map[string]int
 	var tp, tps reflect.Type
