@@ -120,7 +120,7 @@ func (this *Database) Exec(query string, args ...interface{}) (sql.Result, error
 	return this.DB.Exec(query, args...)
 }
 
-// 查询多条记录
+// 查询单条记录
 func (this *Database) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return this.DB.Query(query, args...)
 }
@@ -130,7 +130,43 @@ func (this *Database) QueryRow(query string, args ...interface{}) *sql.Row {
 	return this.DB.QueryRow(query, args...)
 }
 
-// QueryStructs 查询实体集合 obj必须为接收数据的实体指针
+func (this *Database) QueryStruct(obj interface{}, sql string, args ...interface{}) error {
+	var tagMap map[string]int
+	var tp, tps reflect.Type
+	var n, i int
+	var err error
+	var ret *reflect.Value
+	// 检测val参数是否为我们所想要的参数
+	tp = reflect.TypeOf(obj)
+	if reflect.Ptr != tp.Kind() {
+		return errors.New("is not pointer")
+	}
+
+	tps = tp.Elem()
+	if reflect.Struct != tps.Kind() {
+		return errors.New("is not struct pointer")
+	}
+
+	tagMap = make(map[string]int)
+	n = tps.NumField()
+	for i = 0; i < n; i++ {
+		tag := tps.Field(i).Tag.Get("db")
+		if len(tag) > 0 {
+			tagMap[tag] = i + 1
+		}
+	}
+	// 执行查询
+	ret, err = this.queryAndReflectOne(sql, tagMap, tps, args...)
+	if nil != err {
+		return err
+	}
+	// 返回结果
+	reflect.ValueOf(obj).Elem().Set(*ret)
+	return nil
+}
+
+// QueryStructs 查询实体集合
+// obj 为接收数据的实体指针
 func (this *Database) QueryStructs(obj interface{}, sql string, args ...interface{}) error {
 	var tagMap map[string]int
 	var tp, tps reflect.Type
@@ -259,6 +295,47 @@ func (this *Database) Query2Maps(query string, args ...interface{}) (data []map[
 }
 
 // queryAndReflect 查询并将结果反射成实体集合
+func (this *Database) queryAndReflectOne(sqls string,
+	tagMap map[string]int,
+	tp reflect.Type, args ...interface{}) (*reflect.Value, error) {
+
+	// 执行sql语句
+	rows, err := this.DB.Query(sqls, args...)
+	if nil != err {
+		return nil, err
+	}
+
+	defer rows.Close()
+	// 开始枚举结果
+	cols, err := rows.Columns()
+	if nil != err {
+		return nil, err
+	}
+
+	// 构建接收队列
+	scan := make([]interface{}, len(cols))
+	row := make([]interface{}, len(cols))
+	for r := range row {
+		scan[r] = &row[r]
+	}
+
+	if rows.Next() {
+		feild := reflect.New(tp).Elem()
+
+		// 取得结果
+		err = rows.Scan(scan...)
+		reflectStruct(cols, tagMap, feild, row)
+
+		return &feild, nil
+	} else {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, sql.ErrNoRows
+	}
+}
+
+// queryAndReflect 查询并将结果反射成实体集合
 func (this *Database) queryAndReflect(sql string,
 	tagMap map[string]int,
 	tpSlice reflect.Type, args ...interface{}) (reflect.Value, error) {
@@ -291,62 +368,66 @@ func (this *Database) queryAndReflect(sql string,
 		// 取得结果
 
 		err = rows.Scan(scan...)
-		// 开始遍历结果
-		for i := 0; i < len(cols); i++ {
-			n := tagMap[cols[i]] - 1
-			if n < 0 {
-				continue
-			}
-			switch feild.Type().Field(n).Type.Kind() {
-			case reflect.Bool:
-				if nil != row[i] {
-					feild.Field(n).SetBool("false" != string(row[i].([]byte)))
-				} else {
-					feild.Field(n).SetBool(false)
-				}
-			case reflect.String:
-				if nil != row[i] {
-					feild.Field(n).SetString(string(row[i].([]byte)))
-				} else {
-					feild.Field(n).SetString("")
-				}
-			case reflect.Float32, reflect.Float64:
-				if nil != row[i] {
-					v, e := strconv.ParseFloat(string(row[i].([]byte)), 0)
-					if nil == e {
-						feild.Field(n).SetFloat(v)
-					}
-				} else {
-					feild.Field(n).SetFloat(0)
-				}
-			case reflect.Slice: // 此处指处理binary，统一用[]byte返回
-				if nil != row[i] {
-					feild.Field(n).SetBytes(row[i].([]byte))
-				}
-			case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
-				if nil != row[i] {
-					byRow, ok := row[i].([]byte)
-					if ok {
-						v, e := strconv.ParseInt(string(byRow), 10, 64)
-						if nil == e {
-							feild.Field(n).SetInt(v)
-						}
-					} else {
-						v, e := strconv.ParseInt(fmt.Sprint(row[i]), 10, 64)
-						if nil == e {
-							feild.Field(n).SetInt(v)
-						}
-					}
-				} else {
-					feild.Field(n).SetInt(0)
-				}
-			}
-		}
+		reflectStruct(cols, tagMap, feild, row)
 
 		ret = reflect.Append(ret, feild)
 	}
 
 	return ret, nil
+}
+
+func reflectStruct(cols []string, tagMap map[string]int, feild reflect.Value, row []interface{}) {
+	// 开始遍历结果
+	for i := 0; i < len(cols); i++ {
+		n := tagMap[cols[i]] - 1
+		if n < 0 {
+			continue
+		}
+		switch feild.Type().Field(n).Type.Kind() {
+		case reflect.Bool:
+			if nil != row[i] {
+				feild.Field(n).SetBool("false" != string(row[i].([]byte)))
+			} else {
+				feild.Field(n).SetBool(false)
+			}
+		case reflect.String:
+			if nil != row[i] {
+				feild.Field(n).SetString(string(row[i].([]byte)))
+			} else {
+				feild.Field(n).SetString("")
+			}
+		case reflect.Float32, reflect.Float64:
+			if nil != row[i] {
+				v, e := strconv.ParseFloat(string(row[i].([]byte)), 0)
+				if nil == e {
+					feild.Field(n).SetFloat(v)
+				}
+			} else {
+				feild.Field(n).SetFloat(0)
+			}
+		case reflect.Slice: // 此处指处理binary，统一用[]byte返回
+			if nil != row[i] {
+				feild.Field(n).SetBytes(row[i].([]byte))
+			}
+		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
+			if nil != row[i] {
+				byRow, ok := row[i].([]byte)
+				if ok {
+					v, e := strconv.ParseInt(string(byRow), 10, 64)
+					if nil == e {
+						feild.Field(n).SetInt(v)
+					}
+				} else {
+					v, e := strconv.ParseInt(fmt.Sprint(row[i]), 10, 64)
+					if nil == e {
+						feild.Field(n).SetInt(v)
+					}
+				}
+			} else {
+				feild.Field(n).SetInt(0)
+			}
+		}
+	}
 }
 
 // 执行UPDATE语句并返回受影响的行数
@@ -388,7 +469,6 @@ func (this *Database) Insert(query string, args ...interface{}) (int64, error) {
 }
 
 type OneRow map[string]string
-type Results []OneRow
 
 // 判断字段是否存在
 func (row OneRow) Exist(field string) bool {
@@ -428,7 +508,7 @@ func (row OneRow) Set(key, val string) {
 }
 
 // 查询不定字段的结果集
-func (this *Database) Select(query string, args ...interface{}) (Results, error) {
+func (this *Database) Select(query string, args ...interface{}) ([]map[string]string, error) {
 	rows, err := this.DB.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -449,7 +529,7 @@ func (this *Database) Select(query string, args ...interface{}) (Results, error)
 		scans[i] = &rawValues[i]
 	}
 
-	results := make(Results, 0)
+	results := make([]map[string]string, 0)
 	for rows.Next() {
 		err = rows.Scan(scans...)
 		if err != nil {
