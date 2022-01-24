@@ -280,14 +280,11 @@ func queryAndReflectMap(cols []*sql.ColumnType, row []interface{}, m map[string]
 		case "NullTime", "RawBytes", "NullString":
 			switch column.DatabaseTypeName() {
 			case "DECIMAL":
+				var v float64
 				if nil != row[i] {
-					v, e := strconv.ParseFloat(string(row[i].([]byte)), 0)
-					if nil == e {
-						m[column.Name()] = v
-					}
-				} else {
-					m[column.Name()] = 0
+					v, _ = strconv.ParseFloat(string(row[i].([]byte)), 0)
 				}
+				m[column.Name()] = v
 			default:
 				if row[i] != nil {
 					m[column.Name()] = string(row[i].([]byte))
@@ -298,34 +295,25 @@ func queryAndReflectMap(cols []*sql.ColumnType, row []interface{}, m map[string]
 		case
 			"float32", "float64",
 			"NullFloat64", "NullFloat32":
+			var v float64
 			if nil != row[i] {
-				v, e := strconv.ParseFloat(string(row[i].([]byte)), 0)
-				if nil == e {
-					m[column.Name()] = v
-				}
-			} else {
-				m[column.Name()] = 0
+				v, _ = strconv.ParseFloat(string(row[i].([]byte)), 0)
 			}
+			m[column.Name()] = v
 		case
 			"int8", "int16", "int32", "int64", "int",
 			"NullInt64", "NullInt32", "NullInt16", "NullByte",
 			"uint8", "uint16", "uint32", "uint64", "uint":
+			var v int
 			if row[i] != nil {
 				byRow, ok := row[i].([]byte)
 				if ok {
-					v, e := strconv.ParseInt(string(byRow), 10, 64)
-					if nil == e {
-						m[column.Name()] = v
-					}
+					v, _ = strconv.Atoi(string(byRow))
 				} else {
-					v, e := strconv.ParseInt(fmt.Sprint(row[i]), 10, 64)
-					if nil == e {
-						m[column.Name()] = v
-					}
+					v, _ = strconv.Atoi(fmt.Sprint(row[i]))
 				}
-			} else {
-				m[column.Name()] = 0
 			}
+			m[column.Name()] = v
 		default:
 			logWari("未处理类型： ", column.Name(), "=", column.DatabaseTypeName(), "=", column.ScanType().Name(), "==", column.ScanType())
 			m[column.Name()] = fmt.Sprint(row[i])
