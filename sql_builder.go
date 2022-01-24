@@ -520,7 +520,7 @@ func (q *SQ) Exec(args ...interface{}) *result {
 }
 
 // 查询记录集
-func (q *SQ) Query(args ...interface{}) (Results, error) {
+func (q *SQ) Query(args ...interface{}) ([]map[string]string, error) {
 	s, e := q.ToSql()
 	if e != nil {
 		return nil, e
