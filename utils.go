@@ -212,7 +212,7 @@ func Substr(str string, start int, length ...int) string {
 	return string(rs[start:end])
 }
 
-func logWari(war ...interface{})  {
+func logWari(war ...interface{}) {
 	// 输出日志
 	pc, _, line, _ := runtime.Caller(1)
 	p := runtime.FuncForPC(pc)

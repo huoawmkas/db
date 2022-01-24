@@ -168,11 +168,13 @@ func (this *Database) QueryStruct(obj interface{}, sql string, args ...interface
 // QueryStructs 查询实体集合
 // obj 为接收数据的实体指针
 func (this *Database) QueryStructs(obj interface{}, sql string, args ...interface{}) error {
-	var tagMap map[string]int
-	var tp, tps reflect.Type
-	var n, i int
-	var err error
-	var ret reflect.Value
+	var (
+		tagMap  map[string]int
+		tp, tps reflect.Type
+		n, i    int
+		err     error
+		ret     *reflect.Value
+	)
 	// 检测val参数是否为我们所想要的参数
 	tp = reflect.TypeOf(obj)
 	if reflect.Ptr != tp.Kind() {
@@ -205,7 +207,7 @@ func (this *Database) QueryStructs(obj interface{}, sql string, args ...interfac
 	}
 
 	// 返回结果
-	reflect.ValueOf(obj).Elem().Set(ret)
+	reflect.ValueOf(obj).Elem().Set(*ret)
 
 	return nil
 }
@@ -319,43 +321,43 @@ func (this *Database) queryAndReflectOne(sqls string,
 		scan[r] = &row[r]
 	}
 
-	if rows.Next() {
-		feild := reflect.New(tp).Elem()
-
-		// 取得结果
-		err = rows.Scan(scan...)
-		reflectStruct(cols, tagMap, feild, row)
-
-		return &feild, nil
-	} else {
-		if err := rows.Err(); err != nil {
+	if !rows.Next() {
+		if err = rows.Err(); err != nil {
 			return nil, err
 		}
 		return nil, sql.ErrNoRows
 	}
+
+	feild := reflect.New(tp).Elem()
+	// 取得结果
+	err = rows.Scan(scan...)
+	if err != nil {
+		return nil, err
+	}
+	reflectStruct(cols, tagMap, feild, row)
+
+	return &feild, nil
 }
 
 // queryAndReflect 查询并将结果反射成实体集合
 func (this *Database) queryAndReflect(sql string,
 	tagMap map[string]int,
-	tpSlice reflect.Type, args ...interface{}) (reflect.Value, error) {
-
-	var ret reflect.Value
+	tpSlice reflect.Type, args ...interface{}) (*reflect.Value, error) {
 
 	// 执行sql语句
 	rows, err := this.DB.Query(sql, args...)
 	if nil != err {
-		return reflect.Value{}, err
+		return nil, err
 	}
 
 	defer rows.Close()
 	// 开始枚举结果
 	cols, err := rows.Columns()
 	if nil != err {
-		return reflect.Value{}, err
+		return nil, err
 	}
 
-	ret = reflect.MakeSlice(tpSlice, 0, 50)
+	ret := reflect.MakeSlice(tpSlice, 0, 50)
 	// 构建接收队列
 	scan := make([]interface{}, len(cols))
 	row := make([]interface{}, len(cols))
@@ -366,14 +368,16 @@ func (this *Database) queryAndReflect(sql string,
 	for rows.Next() {
 		feild := reflect.New(tpSlice.Elem()).Elem()
 		// 取得结果
-
 		err = rows.Scan(scan...)
+		if err != nil {
+			return nil, err
+		}
 		reflectStruct(cols, tagMap, feild, row)
 
 		ret = reflect.Append(ret, feild)
 	}
 
-	return ret, nil
+	return &ret, nil
 }
 
 func reflectStruct(cols []string, tagMap map[string]int, feild reflect.Value, row []interface{}) {
