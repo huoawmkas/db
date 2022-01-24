@@ -17,6 +17,8 @@ type Database struct {
 	DB   *sql.DB
 }
 
+const dbTag = "db"
+
 // SQL异步执行队列定义
 type queueList struct {
 	list     []*QueueItem //队列列表
@@ -131,11 +133,13 @@ func (this *Database) QueryRow(query string, args ...interface{}) *sql.Row {
 }
 
 func (this *Database) QueryStruct(obj interface{}, sql string, args ...interface{}) error {
-	var tagMap map[string]int
-	var tp, tps reflect.Type
-	var n, i int
-	var err error
-	var ret *reflect.Value
+	var (
+		tagMap  map[string]int
+		tp, tps reflect.Type
+		n, i    int
+		err     error
+		ret     *reflect.Value
+	)
 	// 检测val参数是否为我们所想要的参数
 	tp = reflect.TypeOf(obj)
 	if reflect.Ptr != tp.Kind() {
@@ -150,7 +154,7 @@ func (this *Database) QueryStruct(obj interface{}, sql string, args ...interface
 	tagMap = make(map[string]int)
 	n = tps.NumField()
 	for i = 0; i < n; i++ {
-		tag := tps.Field(i).Tag.Get("db")
+		tag := tps.Field(i).Tag.Get(dbTag)
 		if len(tag) > 0 {
 			tagMap[tag] = i + 1
 		}
@@ -194,7 +198,7 @@ func (this *Database) QueryStructs(obj interface{}, sql string, args ...interfac
 	tagMap = make(map[string]int)
 	n = tps.NumField()
 	for i = 0; i < n; i++ {
-		tag := tps.Field(i).Tag.Get("db")
+		tag := tps.Field(i).Tag.Get(dbTag)
 		if len(tag) > 0 {
 			tagMap[tag] = i + 1
 		}
