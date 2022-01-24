@@ -234,30 +234,52 @@ func (this *Database) Query2Maps(query string, args ...interface{}) (data []map[
 		if err != nil {
 			return
 		}
-		m := map[string]interface{}{}
-		for i, column := range cols {
-			switch column.ScanType().Name() {
-			case "NullTime", "RawBytes", "NullString":
-				switch column.DatabaseTypeName() {
-				case "DECIMAL":
-					if nil != row[i] {
-						v, e := strconv.ParseFloat(string(row[i].([]byte)), 0)
-						if nil == e {
-							m[column.Name()] = v
-						}
-					} else {
-						m[column.Name()] = 0
-					}
-				default:
-					if row[i] != nil {
-						m[column.Name()] = string(row[i].([]byte))
-					} else {
-						m[column.Name()] = ""
-					}
-				}
-			case
-				"float32", "float64",
-				"NullFloat64", "NullFloat32":
+		m := make(map[string]interface{}, len(cols))
+		queryAndReflectMap(cols, row, m)
+		data = append(data, m)
+	}
+	return
+}
+
+// 未做覆盖测试。使用时需注意是否正确返回。
+func (this *Database) Query2Map(query string, args ...interface{}) (data map[string]interface{}, err error) {
+	rows, err := this.Query(query, args...)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	cols, err := rows.ColumnTypes()
+
+	// 构建接收队列
+	values := make([]interface{}, len(cols))
+	row := make([]interface{}, len(cols))
+	for i := range values {
+		values[i] = &row[i]
+	}
+
+	if !rows.Next() {
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, sql.ErrNoRows
+	}
+	err = rows.Scan(values...)
+	if err != nil {
+		return
+	}
+	data = make(map[string]interface{}, len(cols))
+	queryAndReflectMap(cols, row, data)
+	return
+}
+
+// 未做覆盖测试。使用时需注意是否正确返回。
+func queryAndReflectMap(cols []*sql.ColumnType, row []interface{}, m map[string]interface{}) {
+	for i, column := range cols {
+		switch column.ScanType().Name() {
+		case "NullTime", "RawBytes", "NullString":
+			switch column.DatabaseTypeName() {
+			case "DECIMAL":
 				if nil != row[i] {
 					v, e := strconv.ParseFloat(string(row[i].([]byte)), 0)
 					if nil == e {
@@ -266,34 +288,49 @@ func (this *Database) Query2Maps(query string, args ...interface{}) (data []map[
 				} else {
 					m[column.Name()] = 0
 				}
-			case
-				"int8", "int16", "int32", "int64", "int",
-				"NullInt64", "NullInt32", "NullInt16", "NullByte",
-				"uint8", "uint16", "uint32", "uint64", "uint":
+			default:
 				if row[i] != nil {
-					byRow, ok := row[i].([]byte)
-					if ok {
-						v, e := strconv.ParseInt(string(byRow), 10, 64)
-						if nil == e {
-							m[column.Name()] = v
-						}
-					} else {
-						v, e := strconv.ParseInt(fmt.Sprint(row[i]), 10, 64)
-						if nil == e {
-							m[column.Name()] = v
-						}
+					m[column.Name()] = string(row[i].([]byte))
+				} else {
+					m[column.Name()] = ""
+				}
+			}
+		case
+			"float32", "float64",
+			"NullFloat64", "NullFloat32":
+			if nil != row[i] {
+				v, e := strconv.ParseFloat(string(row[i].([]byte)), 0)
+				if nil == e {
+					m[column.Name()] = v
+				}
+			} else {
+				m[column.Name()] = 0
+			}
+		case
+			"int8", "int16", "int32", "int64", "int",
+			"NullInt64", "NullInt32", "NullInt16", "NullByte",
+			"uint8", "uint16", "uint32", "uint64", "uint":
+			if row[i] != nil {
+				byRow, ok := row[i].([]byte)
+				if ok {
+					v, e := strconv.ParseInt(string(byRow), 10, 64)
+					if nil == e {
+						m[column.Name()] = v
 					}
 				} else {
-					m[column.Name()] = 0
+					v, e := strconv.ParseInt(fmt.Sprint(row[i]), 10, 64)
+					if nil == e {
+						m[column.Name()] = v
+					}
 				}
-			default:
-				logWari("未处理类型： ", column.Name(), "=", column.DatabaseTypeName(), "=", column.ScanType().Name(), "==", column.ScanType())
-				m[column.Name()] = fmt.Sprint(row[i])
+			} else {
+				m[column.Name()] = 0
 			}
+		default:
+			logWari("未处理类型： ", column.Name(), "=", column.DatabaseTypeName(), "=", column.ScanType().Name(), "==", column.ScanType())
+			m[column.Name()] = fmt.Sprint(row[i])
 		}
-		data = append(data, m)
 	}
-	return
 }
 
 // queryAndReflect 查询并将结果反射成实体集合
