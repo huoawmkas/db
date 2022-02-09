@@ -27,7 +27,7 @@ const (
 
 // SQL语句构造结构
 type SQ struct {
-	db                                       *Database
+	db                                       *Database // 默认使用Obj数据库对象
 	t                                        int
 	field, table, where, group, order, limit string
 	values                                   Values

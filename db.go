@@ -95,6 +95,7 @@ var (
 	Cache     *cache
 	queue     *queueList
 	Obj       *Database
+	Local     *Database
 )
 
 func init() {
